@@ -39,7 +39,7 @@ UNIVERSE = {
 }
 
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=300)
 def get_fx_rate(currency):
     """USD per 1 unit of local currency. USD itself is 1.0 (no conversion needed)."""
     if currency == "USD":
@@ -52,7 +52,7 @@ def get_fx_rate(currency):
         return None
 
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=300)
 def get_company_data(ticker, country, currency):
     try:
         stock = yf.Ticker(ticker)
@@ -74,7 +74,7 @@ def get_company_data(ticker, country, currency):
         return None
 
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=300)
 def load_data(universe):
     records = [get_company_data(t, c, cur) for t, (c, cur) in universe.items()]
     records = [r for r in records if r is not None]

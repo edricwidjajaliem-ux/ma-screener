@@ -6,7 +6,7 @@ from memo import generate_deal_memo
 
 st.set_page_config(page_title="Cross-Border M&A Screener", layout="wide")
 st.title("US + SE Asia M&A Screener")
-st.caption("Screening potential acquisition targets across US, Indonesia, Singapore, Malaysia, and Thailand.")
+st.caption("Screening US, Indonesia, Singapore, Malaysia, and Thailand companies for a financial profile common among acquisition candidates — not a confirmed target list.")
 
 col_title, col_refresh = st.columns([4, 1])
 with col_refresh:
@@ -16,7 +16,7 @@ with col_refresh:
 with st.spinner("Pulling live market data..."):
     df = load_data(UNIVERSE)
 
-st.caption(f"Last updated: {datetime.datetime.now().strftime('%b %d, %Y %I:%M %p')} — market caps shown in USD. Data auto-refreshes daily, or click Refresh above.")
+st.caption(f"Last updated: {datetime.datetime.now().strftime('%b %d, %Y %I:%M %p')} — market caps shown in USD. Data refreshes every 5 minutes, or click Refresh above.")
 
 # Sidebar filters
 st.sidebar.header("Screening Filters")
@@ -74,14 +74,17 @@ st.subheader(f"Screened Results ({len(filtered)} companies)")
 
 display_cols = ["Ticker", "Name", "Country", "Sector", "Market Cap",
                  "EV/EBITDA", "Revenue Growth (%)", "Profit Margin (%)",
-                 "Debt/Equity", "Current Price"]
+                 "Debt/Equity", "Current Price", "Currency"]
 display_df = filtered[display_cols].copy()
 display_df["Market Cap"] = display_df["Market Cap"].apply(lambda x: f"${x/1e9:,.1f}B")
 display_df["EV/EBITDA"] = display_df["EV/EBITDA"].apply(lambda x: f"{x:.1f}x")
 display_df["Revenue Growth (%)"] = display_df["Revenue Growth (%)"].apply(lambda x: f"{x:.1f}%")
 display_df["Profit Margin (%)"] = display_df["Profit Margin (%)"].apply(lambda x: f"{x:.1f}%")
 display_df["Debt/Equity"] = display_df["Debt/Equity"].apply(lambda x: f"{x:.1f}")
-display_df["Current Price"] = display_df["Current Price"].apply(lambda x: f"{x:,.2f}")
+display_df["Current Price"] = display_df.apply(
+    lambda row: f"{row['Current Price']:,.2f} {row['Currency']}", axis=1
+)
+display_df = display_df.drop(columns=["Currency"])
 
 st.dataframe(
     display_df,
