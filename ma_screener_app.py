@@ -189,12 +189,7 @@ st.subheader("AI Deal Memo Generator")
 
 import anthropic
 
-# Your API key — for local testing you can paste it directly below,
-# but before pushing this to GitHub, move it to an environment variable
-# or Streamlit secrets so it's never exposed in your public repo.
-# API key is read from Streamlit secrets, not hardcoded here.
-# Locally: create .streamlit/secrets.toml with ANTHROPIC_API_KEY = "sk-ant-..."
-# On Streamlit Cloud: set this in the app's Settings > Secrets after deploying.
+# Read from Streamlit secrets — see .streamlit/secrets.toml locally, or Settings > Secrets on Streamlit Cloud
 ANTHROPIC_API_KEY = st.secrets.get("ANTHROPIC_API_KEY", "")
 
 def generate_deal_memo(company_row):
