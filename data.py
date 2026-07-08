@@ -78,6 +78,17 @@ def get_company_data(ticker, country, currency):
 def load_data(universe):
     records = [get_company_data(t, c, cur) for t, (c, cur) in universe.items()]
     records = [r for r in records if r is not None]
+
+    if not records:
+        # yfinance returned nothing for every ticker — likely a temporary
+        # block/rate-limit on this server's IP. Return an empty, correctly
+        # shaped DataFrame so the app shows a clear message instead of crashing.
+        return pd.DataFrame(columns=[
+            "Ticker", "Name", "Country", "Sector", "Market Cap (local)",
+            "Currency", "EV/EBITDA", "Revenue Growth (%)", "Profit Margin (%)",
+            "Debt/Equity", "Current Price", "FX Rate", "Market Cap"
+        ])
+
     df = pd.DataFrame(records)
 
     fx_rates = {cur: get_fx_rate(cur) for cur in df["Currency"].unique()}

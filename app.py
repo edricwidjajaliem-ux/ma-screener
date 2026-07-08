@@ -16,6 +16,10 @@ with col_refresh:
 with st.spinner("Pulling live market data..."):
     df = load_data(UNIVERSE)
 
+if df.empty:
+    st.error("Unable to pull market data right now (Yahoo Finance may be temporarily rate-limiting this server). Try clicking Refresh in a minute.")
+    st.stop()
+
 st.caption(f"Last updated: {datetime.datetime.now().strftime('%b %d, %Y %I:%M %p')} — market caps shown in USD. Data refreshes every 5 minutes, or click Refresh above.")
 
 # Sidebar filters
