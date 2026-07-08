@@ -103,7 +103,7 @@ st.dataframe(
 )
 
 # Download button
-csv = filtered.to_csv(index=False).encode("utf-8")
+csv = display_df.to_csv(index=False).encode("utf-8")
 st.download_button(
     "📥 Download results as CSV",
     data=csv,
