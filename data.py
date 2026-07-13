@@ -64,6 +64,7 @@ def get_company_data(ticker, country, currency):
             "Sector": info.get("sector"),
             "Market Cap (local)": info.get("marketCap"),
             "Currency": currency,
+            "Total Revenue (local)": info.get("totalRevenue"),
             "EV/EBITDA": info.get("enterpriseToEbitda"),
             "Revenue Growth (%)": info.get("revenueGrowth"),
             "Profit Margin (%)": info.get("profitMargins"),
@@ -85,8 +86,8 @@ def load_data(universe):
         # shaped DataFrame so the app shows a clear message instead of crashing.
         return pd.DataFrame(columns=[
             "Ticker", "Name", "Country", "Sector", "Market Cap (local)",
-            "Currency", "EV/EBITDA", "Revenue Growth (%)", "Profit Margin (%)",
-            "Debt/Equity", "Current Price", "FX Rate", "Market Cap"
+            "Currency", "Total Revenue (local)", "EV/EBITDA", "Revenue Growth (%)", "Profit Margin (%)",
+            "Debt/Equity", "Current Price", "FX Rate", "Market Cap", "Total Revenue"
         ])
 
     df = pd.DataFrame(records)
@@ -94,6 +95,7 @@ def load_data(universe):
     fx_rates = {cur: get_fx_rate(cur) for cur in df["Currency"].unique()}
     df["FX Rate"] = df["Currency"].map(fx_rates)
     df["Market Cap"] = df["Market Cap (local)"] * df["FX Rate"]
+    df["Total Revenue"] = df["Total Revenue (local)"] * df["FX Rate"]
 
     df["Revenue Growth (%)"] = df["Revenue Growth (%)"] * 100
     df["Profit Margin (%)"] = df["Profit Margin (%)"] * 100

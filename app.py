@@ -1,5 +1,6 @@
 import streamlit as st
 import datetime
+import pandas as pd
 
 from data import UNIVERSE, load_data
 from memo import generate_deal_memo
@@ -76,11 +77,14 @@ if sectors:
 # Results table
 st.subheader(f"Screened Results ({len(filtered)} companies)")
 
-display_cols = ["Ticker", "Name", "Country", "Sector", "Market Cap",
+display_cols = ["Ticker", "Name", "Country", "Sector", "Market Cap", "Total Revenue",
                  "EV/EBITDA", "Revenue Growth (%)", "Profit Margin (%)",
                  "Debt/Equity", "Current Price", "Currency"]
 display_df = filtered[display_cols].copy()
 display_df["Market Cap"] = display_df["Market Cap"].apply(lambda x: f"${x/1e9:,.1f}B")
+display_df["Total Revenue"] = display_df["Total Revenue"].apply(
+    lambda x: f"${x/1e9:,.2f}B" if pd.notna(x) else "n/a"
+)
 display_df["EV/EBITDA"] = display_df["EV/EBITDA"].apply(lambda x: f"{x:.1f}x")
 display_df["Revenue Growth (%)"] = display_df["Revenue Growth (%)"].apply(lambda x: f"{x:.1f}%")
 display_df["Profit Margin (%)"] = display_df["Profit Margin (%)"].apply(lambda x: f"{x:.1f}%")
