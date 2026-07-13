@@ -10,8 +10,8 @@ Most screening tools stop at the US or treat Southeast Asia as an afterthought. 
 
 ## What it does
 
-- Screens 35+ companies across five markets on market cap, EV/EBITDA, revenue growth, profit margin, and debt/equity
-- Converts every market cap to USD using live FX rates, since SE Asia figures come back in local currency
+- Screens 35+ companies across five markets on market cap, total revenue, EV/EBITDA, revenue growth, profit margin, and debt/equity
+- Converts every market cap and revenue figure to USD using live FX rates, since SE Asia figures come back in local currency
 - Filters by geography and sector
 - Generates a preliminary screening memo (company overview, why it's attractive, key risks, valuation range) via the Claude API for any company in the filtered results
 - Exports results as CSV
