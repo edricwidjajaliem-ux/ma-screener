@@ -77,7 +77,7 @@ def render_buyer_section():
             if not run.buyers:
                 st.info("No buyers were assessed in this run.")
             else:
-                st.dataframe(pd.DataFrame(buyer_rows(run.buyers)).astype(str), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(buyer_rows(run.buyers)).astype(str), width="stretch", hide_index=True)
                 st.caption("n.m. = not meaningful. * = reported cash includes client and deposit funding, so it is not deal capacity.")
                 for rank, buyer in enumerate(run.buyers, 1):
                     fit = f"fit {buyer.assessment.fit_score}/5" if buyer.assessment else buyer.status
