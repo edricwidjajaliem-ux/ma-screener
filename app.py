@@ -59,6 +59,16 @@ max_debt_equity = st.sidebar.slider(
     "Max Debt/Equity", min_value=0, max_value=400, value=150
 )
 
+st.sidebar.caption("Banks and similar financials skip EV/EBITDA, margin and debt/equity. They use these two filters instead:")
+
+max_price_to_book = st.sidebar.slider(
+    "Max P/B (financials)", min_value=0.0, max_value=10.0, value=3.0, step=0.1
+)
+
+min_roe = st.sidebar.slider(
+    "Min ROE (%) (financials)", min_value=0, max_value=30, value=10
+)
+
 sectors = st.sidebar.multiselect(
     "Sector (leave empty = all)",
     options=sorted(df["Sector"].dropna().unique().tolist())
@@ -67,7 +77,8 @@ sectors = st.sidebar.multiselect(
 # Apply filters
 filtered = apply_filters(
     df, market_cap_range, max_ev_ebitda, min_revenue_growth,
-    min_profit_margin, max_debt_equity, countries, sectors
+    min_profit_margin, max_debt_equity, countries, sectors,
+    max_price_to_book, min_roe
 )
 
 # Results table
@@ -75,20 +86,24 @@ st.subheader(f"Screened Results ({len(filtered)} companies)")
 
 display_cols = ["Ticker", "Name", "Country", "Sector", "Market Cap", "Total Revenue",
                  "EV/EBITDA", "Revenue Growth (%)", "Profit Margin (%)",
-                 "Debt/Equity", "Current Price", "Currency"]
+                 "Debt/Equity", "P/B", "ROE (%)", "Current Price", "Currency", "Valuation Basis"]
 display_df = filtered[display_cols].copy()
 display_df["Market Cap"] = display_df["Market Cap"].apply(lambda x: f"${x/1e9:,.1f}B")
 display_df["Total Revenue"] = display_df["Total Revenue"].apply(
     lambda x: f"${x/1e9:,.2f}B" if pd.notna(x) else "n/a"
 )
-display_df["EV/EBITDA"] = display_df["EV/EBITDA"].apply(lambda x: f"{x:.1f}x")
+display_df["EV/EBITDA"] = display_df["EV/EBITDA"].apply(lambda x: f"{x:.1f}x" if pd.notna(x) else "n.m.")
 display_df["Revenue Growth (%)"] = display_df["Revenue Growth (%)"].apply(lambda x: f"{x:.1f}%")
 display_df["Profit Margin (%)"] = display_df["Profit Margin (%)"].apply(lambda x: f"{x:.1f}%")
-display_df["Debt/Equity"] = display_df["Debt/Equity"].apply(lambda x: f"{x:.1f}")
+display_df["Debt/Equity"] = display_df.apply(
+    lambda row: f"{row['Debt/Equity']:.1f}" if row["Valuation Basis"] != "book" and pd.notna(row["Debt/Equity"]) else "n.m.", axis=1
+)
+display_df["P/B"] = display_df["P/B"].apply(lambda x: f"{x:.1f}x" if pd.notna(x) else "n/a")
+display_df["ROE (%)"] = display_df["ROE (%)"].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else "n/a")
 display_df["Current Price"] = display_df.apply(
     lambda row: f"{row['Current Price']:,.2f} {row['Currency']}", axis=1
 )
-display_df = display_df.drop(columns=["Currency"])
+display_df = display_df.drop(columns=["Currency", "Valuation Basis"])
 
 st.dataframe(
     display_df,

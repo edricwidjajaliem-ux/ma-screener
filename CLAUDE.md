@@ -24,9 +24,10 @@ Python 3.13, Streamlit, yfinance, pandas, anthropic SDK (model `claude-sonnet-4-
 ## Known gotchas
 - yfinance `debtToEquity` has inconsistent units (percent vs ratio). It caused a wrong AI memo claim (AKRA showed 34.2x; real figure about 1.26x total liabilities/equity, verified against the annual report).
 - `get_financials` recomputes D/E from the balance sheet and flags mismatches with Yahoo's ratio. That is the current answer to the AKRA problem, for buyers only; the target memo in `memo.py` still uses Yahoo's ratio.
+- Banks have no usable EV/EBITDA or debt/equity on Yahoo. `BOOK_VALUE_TICKERS` screens RJF and 5 SE Asia banks on P/B and ROE instead, and they skip the EV/EBITDA, margin and debt/equity sliders. `memo.py` values them on P/B and ROE too.
 - `enterpriseToEbitda` is glitchy for some tickers (PGAS, ADRO, MEDC).
 - Streamlit Cloud shared IPs can get rate-limited by Yahoo. `load_with_fallback` then uses `snapshots/screener_snapshot.json` and `app.py` shows its date. It also falls back below `MIN_LIVE_ROWS`, so a partial block can't silently shrink the screen. The error only shows if the snapshot is unusable too. Refresh locally with `python refresh_snapshot.py`, then commit. The buyer agent has no snapshot and needs live Yahoo data.
-- `memo.py` still uses `$` for the price on non-USD tickers and the heading "Why It's an Attractive Acquisition Target". Both are known, minor, worth fixing.
+- `memo.py` still uses the heading "Why It's an Attractive Acquisition Target". Known, minor, worth fixing.
 - Yahoo's cash and EV aren't meaningful for banks and brokers (JPM cash $1.88T, STT EV -$58B). They are tagged `bank_broker` in `BUYER_UNIVERSE` and sized by % of market cap.
 - BNY trades as `BNY` on Yahoo, not `BK`. The model recalled `BK` from memory, so buyer loops force the ticker in code.
 - BNY keeps most 10-K content in an Exhibit 13 with an uninformative file name. `_annual_report_exhibit` finds it from the filing index.
