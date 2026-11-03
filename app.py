@@ -92,7 +92,7 @@ display_df = display_df.drop(columns=["Currency"])
 
 st.dataframe(
     display_df,
-    use_container_width=True,
+    width="stretch",
     hide_index=True,
     column_config={
         "Name": st.column_config.TextColumn("Name", width="large"),
