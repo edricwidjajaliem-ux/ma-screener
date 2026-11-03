@@ -2,3 +2,7 @@ streamlit
 yfinance
 pandas
 anthropic
+pydantic
+requests
+beautifulsoup4
+pytest

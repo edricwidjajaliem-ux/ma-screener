@@ -1,0 +1,145 @@
+"""Renders the buyer memo in plain Python, so table figures can only come from tool results."""
+
+import datetime
+
+from agent.schemas import AbilityToPay, BuyerResult, RunResult
+
+NA = "not available"
+
+
+def money(value: float | None) -> str:
+    if value is None:
+        return NA
+    for scale, suffix in ((1e12, "T"), (1e9, "B"), (1e6, "M")):
+        if abs(value) >= scale:
+            return f"${value / scale:,.1f}".removesuffix(".0") + suffix
+    return f"${value:,.0f}"
+
+
+def pay_summary(buyer: BuyerResult) -> str:
+    pay = buyer.ability_to_pay
+    if pay is None or pay.basis == NA:
+        return NA
+    summary = f"{pay.pct_market_cap_low:.1f}%-{pay.pct_market_cap_high:.1f}% of mkt cap"
+    if pay.basis == "cash_coverage":
+        summary += f"; cash covers {pay.cash_coverage_high:.1f}x-{pay.cash_coverage_low:.1f}x"
+    return summary
+
+
+def pay_summary_text(pay: AbilityToPay) -> str:
+    """The sentence the model is told to copy, so ratios keep their units."""
+    if pay.basis == NA:
+        return NA
+    text = (f"A {money(pay.deal_low)} to {money(pay.deal_high)} deal is {pay.pct_market_cap_low}% to "
+            f"{pay.pct_market_cap_high}% of market cap")
+    if pay.basis == "cash_coverage":
+        text += (f"; reported cash covers {pay.cash_coverage_low}x of the low end and "
+                 f"{pay.cash_coverage_high}x of the high end")
+    return text + "."
+
+
+def _clean(text: str) -> str:
+    return text.replace("|", "/").replace("\n", " ")
+
+
+def buyer_rows(buyers: list[BuyerResult]) -> list[dict]:
+    rows = []
+    for rank, buyer in enumerate(buyers, 1):
+        fin = buyer.financials
+        cash = money(fin.get("cash"))
+        if fin.get("cash_note") and fin.get("cash") is not None:
+            cash += "*"
+        rows.append({
+            "#": rank,
+            "Buyer": f"{_clean(buyer.name)} ({buyer.ticker})",
+            "Segment": buyer.segment,
+            "Fit (1-5)": buyer.assessment.fit_score if buyer.assessment else buyer.status,
+            "Mkt cap": money(fin.get("market_cap")),
+            "Cash": cash,
+            "Debt": money(fin.get("total_debt")),
+            "Revenue": money(fin.get("revenue")),
+            "EV": "n.m." if fin.get("enterprise_value_note") else money(fin.get("enterprise_value")),
+            "Ability to pay": pay_summary(buyer),
+        })
+    return rows
+
+
+def buyer_table(buyers: list[BuyerResult]) -> str:
+    rows = buyer_rows(buyers)
+    lines = ["| " + " | ".join(rows[0]) + " |", "|" + "---|" * len(rows[0])]
+    lines += ["| " + " | ".join(str(value) for value in row.values()) + " |" for row in rows]
+    return "\n".join(lines)
+
+
+def buyer_detail(rank: int, buyer: BuyerResult) -> str:
+    lines = [f"### {rank}. {buyer.name} ({buyer.ticker})"]
+    if buyer.assessment is None:
+        lines.append(f"Assessment {buyer.status}: {buyer.error or NA}")
+        return "\n\n".join(lines)
+    a = buyer.assessment
+    lines.append(f"**Fit: {a.fit_score}/5.** {a.rationale}")
+    lines.append(f"**Strategic gap addressed:** {a.strategic_gap_addressed}")
+    pay = buyer.ability_to_pay
+    pay_note = f" {pay.note}." if pay and pay.note else ""
+    lines.append(f"**Ability to pay:** {pay_summary(buyer)}.{pay_note}")
+    lines.append("**Key risks:**\n" + "\n".join(f"- {risk}" for risk in a.key_risks))
+    lines.append("**Sources:**\n" + ("\n".join(f"- {source}" for source in a.sources) or f"- {NA}"))
+    if buyer.unverified_numbers:
+        lines.append("**Check failed. Verify these before use:** "
+                     + ", ".join(buyer.unverified_numbers))
+    return "\n\n".join(lines)
+
+
+def _data_notes(buyers: list[BuyerResult]) -> list[str]:
+    notes = []
+    for buyer in buyers:
+        fin = buyer.financials
+        if fin.get("debt_to_equity_check") == "mismatch":
+            notes.append(f"{buyer.ticker}: Yahoo debt/equity ({fin.get('yahoo_debt_to_equity_raw')}) does not match "
+                         f"the balance sheet recomputation ({fin.get('debt_to_equity_recomputed')}x).")
+    return notes
+
+
+def render_memo(run: RunResult) -> str:
+    today = datetime.date.today().strftime("%B %d, %Y")
+    deal = (f"{money(run.deal_low)} to {money(run.deal_high)}, an assumption entered by the user and not a valuation"
+            if run.deal_low and run.deal_high else NA)
+    parts = []
+    if run.dry_run:
+        parts.append("> **DRY RUN. Fictional fixture companies and figures, not real data.**")
+    parts += [
+        "# Buyer Universe Memo",
+        f"**Target:** {run.target}  \n**Deal size:** {deal}  \n**Date:** {today}  \n**Model:** {run.model}",
+        "*Screened does not mean confirmed. This is a first-pass map built from public filings and market data. "
+        "It is not evidence that any company is interested in this target, and it does not replace diligence.*",
+        "## Buyer Universe",
+    ]
+    if run.shortlist_reasoning:
+        parts.append(run.shortlist_reasoning)
+    if not run.buyers:
+        parts.append("No buyers were assessed in this run.")
+    else:
+        parts.append(buyer_table(run.buyers))
+        parts.append("n.m. = not meaningful. * = reported cash includes client and deposit funding, so it is not "
+                     "deal capacity. Ranked by fit score, then by deal size relative to market cap.")
+        parts.append("## Buyer Detail")
+        parts += [buyer_detail(rank, buyer) for rank, buyer in enumerate(run.buyers, 1)]
+
+    parts.append("## Scope and Limitations")
+    limits = [
+        "Public US buyers only. Private acquirers such as Ripple, Stripe, Kraken and Fidelity can be among the most "
+        "relevant buyers for a crypto target, and they are not covered because they have no EDGAR filings or market data.",
+        "Figures in the table are filled by code from Yahoo Finance. Figures in the text passed an automated check "
+        "that they appear in a tool result, which does not prove they were interpreted correctly.",
+        "Citations are reported by the model and were not independently verified.",
+        "Filing text comes from each buyer's latest 10-K, shown by filing date under Sources. Later deals and "
+        "announcements are not captured, so check recent news before relying on any buyer's status.",
+        "Fit scores are model judgment and can move a point between runs. Use them to sort, not as precise ratings.",
+        *_data_notes(run.buyers),
+    ]
+    parts.append("\n".join(f"- {limit}" for limit in limits))
+
+    cost = NA if run.cost_usd is None else f"${run.cost_usd:.4f}"
+    parts.append(f"*Run {run.run_id}. Tokens: {run.input_tokens:,} input, {run.cache_write_tokens:,} cache write, "
+                 f"{run.cache_read_tokens:,} cache read, {run.output_tokens:,} output. Estimated cost: {cost}.*")
+    return "\n\n".join(parts) + "\n"
