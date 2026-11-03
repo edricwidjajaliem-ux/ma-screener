@@ -39,27 +39,31 @@ flowchart TD
     A[Target description + deal size assumption] --> B[Shortlist loop]
     B -->|get_candidates| C[BUYER_UNIVERSE + apply_filters]
     B --> D[Up to 10 tickers, checked against the universe]
-    D --> E[One tool-use loop per buyer, max 12 iterations]
+    D --> E[One tool-use loop per buyer, max 12 iterations, ticker locked in code]
     E -->|get_financials| F[Yahoo Finance via yfinance]
-    E -->|fetch_filing_excerpt| G[SEC EDGAR 10-K / 10-Q]
-    E --> H{Final JSON passes the number check?}
+    E -->|fetch_filing_excerpt| G[SEC EDGAR: latest 10-K and required 10-Q]
+    E --> H{Final JSON passes the checks? Numbers, quotes word for word, 10-Q checked}
     H -->|No, first failure| E
-    H -->|Yes, or flagged after one correction| I[Python adds table figures and ability to pay]
-    I --> J[Rank by fit, then deal size vs market cap]
-    J --> K[Memo + Streamlit results]
-    E -. every tool call and token count .-> L[runs/run-id.jsonl]
+    H -->|Yes, or flagged after one correction| I[Drop failed quotes, and a factor without a verified quote becomes no]
+    I --> J[Python calculates fit score and ability to pay, and adds table figures and sources]
+    J --> K[Rank by fit, then deal size vs market cap]
+    K --> L[Memo + Streamlit results]
+    E -. every tool call and token count .-> M[runs/run-id.jsonl]
 ```
 
 ### How it's built
 
 | File | What it does |
 |---|---|
-| `agent/agent.py` | The hand-written tool-use loop, token cap, retries, cost tracking, and CLI |
+| `agent/agent.py` | The hand-written tool-use loop, evidence checks, token cap, retries, cost tracking, and CLI |
 | `agent/tools.py` | `get_candidates`, `get_financials`, `fetch_filing_excerpt`, and the ability-to-pay math |
 | `agent/verify.py` | The number check |
-| `agent/schemas.py` | Pydantic models for the output |
+| `agent/schemas.py` | Pydantic models for the output, and the fit score formula |
 | `agent/report.py` | Renders the memo in plain Python, with no LLM call |
 | `agent/mock.py` | Scripted API client and fictional companies for `--dry-run` |
+| `agent/stability.py` | Runs the same buyers repeatedly and reports how much fit scores move |
+| `buyer_section.py` | The Streamlit section for buyer analysis, shown even when market data is down |
+| `refresh_snapshot.py` | Updates the saved screener data the app falls back on |
 
 ### Decisions
 
