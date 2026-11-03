@@ -4,6 +4,12 @@
 
 A cross-border M&A screening tool covering the US, Indonesia, Singapore, Malaysia, and Thailand, with an AI-generated preliminary deal memo for any company that clears the filters, plus an AI agent that builds a ranked buyer map for a target.
 
+## Versions
+
+- **V1:** the screener and a single-call deal memo
+- **V2 (current):** adds the AI buyer analysis agent, with code-checked evidence and calculated fit scores
+- **V3 (planned):** adds a hand-entered private-buyer list, clearly labeled as manual
+
 ## Why I built this
 
 Most screening tools stop at the US or treat Southeast Asia as an afterthought. I wanted something that covers both — screening for companies with a financial profile common among acquisition candidates (reasonable valuation, growth, manageable leverage) across five markets, with currency-adjusted comparisons so a $2B Indonesian company and a $2B US company are actually being compared on equal footing.
@@ -59,6 +65,18 @@ flowchart TD
 - **A separate buyer universe.** The screener's universe has almost no crypto or fintech buyers, and its target filters would remove them anyway. Most banks and brokers have no EV/EBITDA on Yahoo, and `load_data` drops those rows. Both paths share `apply_filters`.
 - **Figures in the table never come from the model.** Python fills them directly from tool results.
 - **A number check on the model's text.** Every figure must appear in a tool result at the precision written. A failure gets one correction, and if it still fails, the memo flags it in place.
+- **Quotes are checked and sources are built by code.** The model must quote each claim word for word, and code checks the quote against the filing text it fetched. The source list comes from what was actually retrieved, with a link to each filing, so the model can't cite a document it never saw.
+- **Code calculates the fit score.** The model answers five yes/no questions, and each "yes" needs a verified quote or it counts as "no". The same answers always give the same score:
+
+| Answers from the filings | Score |
+|---|---|
+| The filing states an obstacle that rules the deal out | 1 |
+| Activity in the target's line, plus a stated priority and a related deal | 5 |
+| Activity in the target's line | 4 |
+| Digital asset activity, but not in the target's line | 3 |
+| None of the above | 2 |
+
+- **Every buyer's latest 10-Q is checked.** A 10-K can be most of a year old, so the agent must also check the 10-Q, and the memo's table shows each buyer's latest filing date.
 - **Banks and brokers are treated differently.** Their reported cash includes client and deposit funding (JPM shows $1.88T), and Yahoo's EV can be negative (STT at -$58B). The memo marks EV as not meaningful and sizes the deal as a percent of market cap instead of cash coverage.
 - **Debt/equity is recomputed from the balance sheet.** Yahoo's ratio mixes percent and ratio units, which caused a wrong figure in an earlier memo. Mismatches appear in the memo's limitations section.
 - **Deal size comes from the user and is labeled as an assumption.** A text description contains no valuation, so without an input the memo says "not available".
@@ -68,11 +86,11 @@ flowchart TD
 
 ### Limitations
 
-- **Public US buyers only.** Private acquirers such as Ripple, Stripe, Kraken and Fidelity can be among the most relevant buyers for a crypto target, and they have no EDGAR filings or market data. A hand-entered private-buyer list, clearly labeled as manual, is planned for v2.
+- **Public US buyers only.** Private acquirers such as Ripple, Stripe, Kraken and Fidelity can be among the most relevant buyers for a crypto target, and they have no EDGAR filings or market data. A hand-entered private-buyer list, clearly labeled as manual, is planned for V3.
 - **The number check proves a figure exists in a tool result, not that it was used correctly.** A figure could match by coincidence or be misread. Bare integers under 100 and years aren't checked.
-- **Citations are model-reported** and aren't independently verified yet.
-- **Filings can be months old.** Recent deals and news aren't captured, because web search is off in v1.
-- **Fit scores are model judgment.** In testing, scores for the same buyer moved by a point between runs and between models. Use them to sort, not as precise ratings.
+- **A verified quote shows the words are in the filing, not that the reasoning is right.** The rationale and risks are still model judgment, so a person has to review them.
+- **News after the latest filing isn't captured,** because web search is off.
+- **Fit scores still rest on model judgment.** Code does the math, but the model answers the yes/no questions, and those answers can change between runs. See [measured stability](docs/score_stability.md), and use the scores to sort, not as precise ratings. The formula also treats a buyer that already has the capability as a strong fit, though a buyer may have less need for it.
 - **Filing parsing is heuristic.** A section that can't be located returns "not available" rather than a guess. JPM's MD&A and BNY's risk factors currently can't be located as sections, though keyword-based passages still work for both.
 - "Screened" does not mean a buyer is interested. This is a first-pass map, not a substitute for diligence.
 
@@ -115,6 +133,13 @@ python refresh_snapshot.py
 ```
 
 ### Running the agent from the command line
+
+To measure how much fit scores move between runs (about $0.05 per 10 assessments on Haiku):
+
+```bash
+python -m agent.stability "mid-size crypto custody company, US-based" --deal-low 500 --deal-high 1500 --runs 5
+```
+
 
 These read `ANTHROPIC_API_KEY` and `SEC_USER_AGENT` from your environment. `MODEL_NAME` defaults to `claude-haiku-5-5`, and `MAX_RUN_TOKENS` defaults to 1,000,000.
 

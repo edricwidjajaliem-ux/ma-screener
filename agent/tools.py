@@ -302,6 +302,9 @@ def fetch_filing_excerpt(ticker: str, section: str, form: str = "10-K") -> dict:
     if filing["exhibit_url"]:
         text += "\n" + _filing_text(filing["exhibit_url"])
     citation = f"{ticker} {form} filed {filing['filing_date']}, section: {section}"
+    dated = {"form": form, "filing_date": filing["filing_date"], "citation": citation, "url": filing["url"]}
+    if filing["exhibit_url"]:
+        dated["exhibit_url"] = filing["exhibit_url"]  # the excerpt may come from here, so a reader needs this link too
     if section in KEYWORDS:
         excerpt = keyword_passages(text, KEYWORDS[section])
     elif section == "liquidity":
@@ -309,17 +312,16 @@ def fetch_filing_excerpt(ticker: str, section: str, form: str = "10-K") -> dict:
     elif section in HEADINGS[form]:
         excerpt = extract_section(text, *HEADINGS[form][section])
     else:
-        return _not_available(f"{section} is not a {form} section", citation=citation)
+        return _not_available(f"{section} is not a {form} section", **dated)
     if not excerpt:
         return _not_available(
             f"{section} not found in the main {form} document; it may be incorporated by reference",
-            citation=citation, url=filing["url"],
+            **dated,
         )
     excerpt = re.sub(r"\s*\n\s*", "\n", excerpt).strip()
     return {
         "status": "ok",
-        "citation": citation,
-        "url": filing["url"],
+        **dated,
         "truncated": len(excerpt) > MAX_EXCERPT_CHARS,
         "excerpt": excerpt[:MAX_EXCERPT_CHARS],
     }
