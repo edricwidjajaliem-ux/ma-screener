@@ -81,7 +81,13 @@ class DryRunClient:
         self.messages = self
 
     def create(self, **kwargs):
-        history = kwargs["messages"]
+        response = self._next_step(kwargs["messages"])
+        # Nothing is sent to the API, so a dry run must report no tokens and no cost.
+        response.usage = SimpleNamespace(input_tokens=0, cache_creation_input_tokens=0,
+                                         cache_read_input_tokens=0, output_tokens=0)
+        return response
+
+    def _next_step(self, history):
         turn = sum(1 for m in history if m["role"] == "assistant")
         first = history[0]["content"]
         if "Shortlist at most" in first:

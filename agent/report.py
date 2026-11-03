@@ -23,11 +23,19 @@ def money(value: float | None) -> str:
     return f"${value:,.0f}"
 
 
+def _pct_range(low: float, high: float) -> str:
+    """One decimal normally, two below 1% so small deals don't read as 0.0%."""
+    def shown(value: float, places: int) -> str:
+        return "<0.01%" if value < 0.01 else f"{value:.{places}f}%"
+    places = 2 if low < 1 else 1
+    return f"{shown(low, places)}-{shown(high, places)}"
+
+
 def pay_summary(buyer: BuyerResult) -> str:
     pay = buyer.ability_to_pay
     if pay is None or pay.basis == NA:
         return NA
-    summary = f"{pay.pct_market_cap_low:.1f}%-{pay.pct_market_cap_high:.1f}% of mkt cap"
+    summary = f"{_pct_range(pay.pct_market_cap_low, pay.pct_market_cap_high)} of mkt cap"
     if pay.basis == "cash_coverage":
         summary += f"; cash covers {pay.cash_coverage_high:.1f}x-{pay.cash_coverage_low:.1f}x"
     return summary
@@ -37,8 +45,9 @@ def pay_summary_text(pay: AbilityToPay) -> str:
     """The sentence the model is told to copy, so ratios keep their units."""
     if pay.basis == NA:
         return NA
-    text = (f"A {money(pay.deal_low)} to {money(pay.deal_high)} deal is {pay.pct_market_cap_low}% to "
-            f"{pay.pct_market_cap_high}% of market cap")
+    low = "under 0.01" if pay.pct_market_cap_low < 0.01 else pay.pct_market_cap_low
+    high = "under 0.01" if pay.pct_market_cap_high < 0.01 else pay.pct_market_cap_high
+    text = f"A {money(pay.deal_low)} to {money(pay.deal_high)} deal is {low}% to {high}% of market cap"
     if pay.basis == "cash_coverage":
         text += (f"; reported cash covers {pay.cash_coverage_low}x of the low end and "
                  f"{pay.cash_coverage_high}x of the high end")

@@ -8,9 +8,9 @@ from agent import agent as agent_module
 from agent.agent import (AgentError, BudgetExceeded, RunState, assess_buyer, rank_buyers, request_cost,
                          run_buyer_analysis, run_loop)
 from agent.mock import FIXTURE_TOOLS, text_response, tool_response
-from agent.report import render_memo
+from agent.report import pay_summary, pay_summary_text, render_memo
 from agent.schemas import BuyerAssessment, BuyerResult
-from agent.tools import FETCH_FILING_DEF, GET_FINANCIALS_DEF
+from agent.tools import FETCH_FILING_DEF, GET_FINANCIALS_DEF, ability_to_pay
 
 
 class ScriptedClient:
@@ -401,3 +401,26 @@ def test_stability_table_reports_range_and_changed_factors():
     assert "| AAA | 3, 3 | 3-3 | none |" in table
     assert "| BBB | 3, 4 | 3-4 | digital_asset_activity, target_line_activity |" in table
     assert "| CCC | none completed | not available | none |" in table
+
+
+def test_dry_run_reports_no_tokens_and_no_cost(tmp_path, monkeypatch):
+    monkeypatch.setattr(agent_module, "RUNS_DIR", tmp_path)
+    run = run_buyer_analysis("crypto custody", deal_low=500e6, deal_high=1.5e9, dry_run=True)
+    assert run.input_tokens + run.cache_write_tokens + run.cache_read_tokens + run.output_tokens == 0
+    assert run.cost_usd == 0
+
+
+@pytest.mark.parametrize("low,high,market_cap,shown", [
+    (10e6, 40e6, 30e9, "0.03%-0.13%"),
+    (500e6, 1.5e9, 99.4e9, "0.50%-1.51%"),
+    (500e6, 1.5e9, 36.5e9, "1.4%-4.1%"),
+    (1e6, 2e6, 900e9, "<0.01%-<0.01%"),
+])
+def test_market_cap_percent_stays_readable_for_small_deals(low, high, market_cap, shown):
+    pay = ability_to_pay({"market_cap": market_cap, "balance_sheet_type": "bank_broker", "cash": 1e9}, low, high)
+    assert pay_summary(BuyerResult(ticker="AAA", ability_to_pay=pay)).startswith(shown)
+
+
+def test_summary_text_never_tells_the_model_a_deal_is_zero_percent():
+    pay = ability_to_pay({"market_cap": 900e9, "balance_sheet_type": "bank_broker", "cash": 1e9}, 1e6, 2e6)
+    assert pay_summary_text(pay) == "A $1M to $2M deal is under 0.01% to under 0.01% of market cap."
