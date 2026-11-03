@@ -4,9 +4,15 @@ Handles currency conversion since SE Asia market caps come back
 in local currency, not USD.
 """
 
+import datetime
+import json
+import pathlib
+
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+
+SNAPSHOT_PATH = pathlib.Path(__file__).parent / "snapshots" / "screener_snapshot.json"
 
 # Ticker universe, tagged by country and currency.
 # US caps are already in USD. SE Asia caps are in local currency
@@ -37,6 +43,9 @@ UNIVERSE = {
     "PTT.BK": ("Thailand", "THB"), "CPALL.BK": ("Thailand", "THB"),
     "AOT.BK": ("Thailand", "THB"),
 }
+
+# Fewer live rows than this means Yahoo is blocking us, not that the market changed.
+MIN_LIVE_ROWS = len(UNIVERSE) // 2
 
 # Potential acquirers for crypto/fintech targets: ticker -> (segment, balance sheet type).
 # "bank_broker" cash includes client and deposit funding, so it can't be read as
@@ -163,3 +172,30 @@ def _build_frame(records):
     df["Revenue Growth (%)"] = df["Revenue Growth (%)"] * 100
     df["Profit Margin (%)"] = df["Profit Margin (%)"] * 100
     return df
+
+
+def save_snapshot(df, path=SNAPSHOT_PATH):
+    path.parent.mkdir(exist_ok=True)
+    rows = json.loads(df.to_json(orient="records"))
+    payload = {"as_of": datetime.date.today().isoformat(), "rows": rows}
+    path.write_text(json.dumps(payload, indent=1) + "\n")
+
+
+def load_snapshot(path=SNAPSHOT_PATH):
+    """Returns (DataFrame, as_of date string), or an empty frame if the file is missing or unreadable."""
+    try:
+        payload = json.loads(path.read_text())
+        return pd.DataFrame(payload["rows"]), payload["as_of"]
+    except (OSError, ValueError, KeyError):
+        return pd.DataFrame(), None
+
+
+def load_with_fallback(universe):
+    """Live data when Yahoo responds, otherwise the saved snapshot. A date in the result means saved data."""
+    live = load_data(universe)
+    if len(live) >= MIN_LIVE_ROWS:
+        return live, None
+    saved, as_of = load_snapshot()
+    if saved.empty:
+        return live, None
+    return saved, as_of

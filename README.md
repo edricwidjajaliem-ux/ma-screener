@@ -15,6 +15,7 @@ Most screening tools stop at the US or treat Southeast Asia as an afterthought. 
 - Filters by geography and sector
 - Generates a preliminary screening memo (company overview, why it's attractive, key risks, valuation range) via the Claude API for any company in the filtered results
 - Exports results as CSV
+- Falls back to a dated copy of the screener data when Yahoo Finance blocks the server, and labels it as saved data
 - Builds a ranked buyer universe for a target description using an AI agent ([sample memo](docs/sample_buyer_memo.md))
 
 ## Screenshots
@@ -81,6 +82,7 @@ Python, Pandas, Streamlit, yFinance, Claude API (Anthropic), SEC EDGAR, Pydantic
 
 ## Limitations
 
+- Saved data is only as fresh as the last refresh, and the app shows its date. Yahoo blocks shared Streamlit Cloud IPs at times, so the snapshot in `snapshots/` is refreshed from a local machine
 - Data refreshes every 5 minutes; market fundamentals like EV/EBITDA don't move meaningfully within that window, but live share prices may lag slightly
 - Philippines (PSE) is excluded — no reliable free data source found via yFinance
 - The AI-generated memo is a first-pass draft based only on the metrics shown; it is not a substitute for real diligence, filings review, or comparable transaction analysis
@@ -104,6 +106,12 @@ SEC_USER_AGENT = "your-app-name your-email@example.com"
 Then run:
 ```bash
 streamlit run app.py
+```
+
+To update the saved data the app falls back on, run this and commit the result. It leaves the file alone if Yahoo returns too few companies.
+
+```bash
+python refresh_snapshot.py
 ```
 
 ### Running the agent from the command line
