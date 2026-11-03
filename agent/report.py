@@ -5,6 +5,13 @@ import datetime
 from agent.schemas import AbilityToPay, BuyerResult, RunResult
 
 NA = "not available"
+FACTOR_LABELS = {
+    "digital_asset_activity": "Digital asset activity",
+    "target_line_activity": "Activity in target's line",
+    "stated_priority": "Stated priority",
+    "related_deal": "Related deal",
+    "clear_obstacle": "Clear obstacle",
+}
 
 
 def money(value: float | None) -> str:
@@ -54,6 +61,7 @@ def buyer_rows(buyers: list[BuyerResult]) -> list[dict]:
             "Buyer": f"{_clean(buyer.name)} ({buyer.ticker})",
             "Segment": buyer.segment,
             "Fit (1-5)": buyer.assessment.fit_score if buyer.assessment else buyer.status,
+            "Latest filing": buyer.latest_filing,
             "Mkt cap": money(fin.get("market_cap")),
             "Cash": cash,
             "Debt": money(fin.get("total_debt")),
@@ -71,6 +79,15 @@ def buyer_table(buyers: list[BuyerResult]) -> str:
     return "\n".join(lines)
 
 
+def _source_line(source: dict) -> str:
+    if not source["url"].startswith("http"):
+        return source["citation"]
+    line = f"[{source['citation']}]({source['url']})"
+    if source.get("exhibit_url"):
+        line += f" and its [annual report exhibit]({source['exhibit_url']})"
+    return line
+
+
 def buyer_detail(rank: int, buyer: BuyerResult) -> str:
     lines = [f"### {rank}. {buyer.name} ({buyer.ticker})"]
     if buyer.assessment is None:
@@ -83,10 +100,16 @@ def buyer_detail(rank: int, buyer: BuyerResult) -> str:
     pay_note = f" {pay.note}." if pay and pay.note else ""
     lines.append(f"**Ability to pay:** {pay_summary(buyer)}.{pay_note}")
     lines.append("**Key risks:**\n" + "\n".join(f"- {risk}" for risk in a.key_risks))
-    lines.append("**Sources:**\n" + ("\n".join(f"- {source}" for source in a.sources) or f"- {NA}"))
+    lines.append("**Fit factors (score calculated by code):** " + "; ".join(
+        f"{label}: {'yes' if getattr(a, factor) else 'no'}" for factor, label in FACTOR_LABELS.items()))
+    if a.evidence:
+        lines.append("**Evidence (each quote checked word for word against the filing):**\n" + "\n".join(
+            f'- {FACTOR_LABELS[item.supports]}: "{_clean(item.quote)}" ({item.citation})' for item in a.evidence))
+    sources = [_source_line(source) for source in buyer.sources]
+    lines.append("**Sources:**\n" + ("\n".join(f"- {source}" for source in sources) or f"- {NA}"))
     if buyer.unverified_numbers:
-        lines.append("**Check failed. Verify these before use:** "
-                     + ", ".join(buyer.unverified_numbers))
+        lines.append("**Check failed. Verify these before use:**\n"
+                     + "\n".join(f"- {_clean(problem)}" for problem in buyer.unverified_numbers))
     return "\n\n".join(lines)
 
 
@@ -131,10 +154,12 @@ def render_memo(run: RunResult) -> str:
         "relevant buyers for a crypto target, and they are not covered because they have no EDGAR filings or market data.",
         "Figures in the table are filled by code from Yahoo Finance. Figures in the text passed an automated check "
         "that they appear in a tool result, which does not prove they were interpreted correctly.",
-        "Citations are reported by the model and were not independently verified.",
-        "Filing text comes from each buyer's latest 10-K, shown by filing date under Sources. Later deals and "
-        "announcements are not captured, so check recent news before relying on any buyer's status.",
-        "Fit scores are model judgment and can move a point between runs. Use them to sort, not as precise ratings.",
+        "Sources are built by code from filings actually retrieved, and quotes were checked word for word against "
+        "them. That shows the words are in the filing, not that the inference drawn from them is right.",
+        "Filing text comes from each buyer's latest 10-K and 10-Q. Events after the date in the Latest filing column "
+        "are not captured, so check recent news before relying on any buyer's status.",
+        "Code calculates fit scores from yes/no factors the model answers from the filings. Those answers are still "
+        "model judgment, so use the scores to sort, not as precise ratings.",
         *_data_notes(run.buyers),
     ]
     parts.append("\n".join(f"- {limit}" for limit in limits))

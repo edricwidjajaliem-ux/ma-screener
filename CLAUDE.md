@@ -10,7 +10,7 @@ Python 3.13, Streamlit, yfinance, pandas, anthropic SDK (model `claude-sonnet-4-
 - `app.py`: Streamlit UI. Sidebar filters, results table, CSV export, deal memo section.
 - `data.py`: `UNIVERSE` (ticker -> (country, currency), 38 tickers), `get_fx_rate`, `get_company_data`, `load_data`. All `@st.cache_data(ttl=300)`.
 - `memo.py`: `generate_deal_memo(company_row, api_key)` single Claude call.
-- `agent/`: buyer analysis. `agent.py` (loop, caps, CLI), `tools.py`, `verify.py` (number check), `schemas.py`, `report.py` (memo, no LLM), `mock.py` (dry run). `data.py` also holds `BUYER_UNIVERSE`, `load_buyers`, and `apply_filters`.
+- `agent/`: buyer analysis. `agent.py` (loop, caps, evidence checks, CLI), `tools.py`, `verify.py` (number check), `schemas.py` (includes the fit score formula), `report.py` (memo, no LLM), `mock.py` (dry run), `stability.py` (score stability test). `data.py` also holds `BUYER_UNIVERSE`, `load_buyers`, and `apply_filters`.
 - Secrets: `ANTHROPIC_API_KEY` in `.streamlit/secrets.toml` locally (gitignored) and in Streamlit Cloud Secrets. Never hardcode or commit. The agent also reads `SEC_USER_AGENT`, `MODEL_NAME` (default `claude-haiku-5-5`), `MAX_RUN_TOKENS`, and `ENABLE_AGENT` (leave off on the public app).
 
 ## Key decisions (do not re-litigate; execute)
@@ -40,14 +40,17 @@ Python 3.13, Streamlit, yfinance, pandas, anthropic SDK (model `claude-sonnet-4-
 - Explain each decision briefly so he can defend it.
 - Keep him executing; do not let him spiral on "is it big enough".
 
-## Agent roadmap
+## Versions and roadmap
 Goal: real AI agents in the screener, with a story he can defend in interviews.
 
-1. **Buyer analysis agent (built).** `agent/`: target description -> ranked public buyer map with sourced memo. Python fills table figures, and a number check runs on the model's text. The D/E recompute and mismatch flag from the earlier memo verification plan live in `get_financials`.
-2. **Next for buyers (v2).** Hand-entered private-buyer list (Ripple, Stripe, Kraken, Fidelity), clearly labeled as manual and not from filings. Citation verification, which was cut from v1. Optional `web_search`, off in v1.
-3. **Memo verification for targets.** Apply the same D/E recompute to `memo.py`, keeping it as the fallback, so the AKRA-style error is fixed for screened targets too.
-4. **Watch agent.** Streamlit only runs when the page is visited, so "live updates" need a scheduler: GitHub Actions cron -> snapshot the screened set to a JSON file in the repo -> diff against the last snapshot -> Claude summarizes what entered or left the screen and why -> notify (email or Slack webhook). Needs storage and secrets in GitHub Actions.
-5. Later: sector/peer comps agent.
+- **V1 (built):** screener and single-call deal memo.
+- **V2 (built, current):** buyer analysis agent in `agent/`: target description -> ranked public buyer map with a sourced memo. Python fills table figures, a number check runs on the model's text, quotes are verified word for word against fetched filings, sources are built by code, and the fit score is calculated from yes/no factors. Every buyer's latest 10-Q is checked. The D/E recompute and mismatch flag live in `get_financials`.
+- **V3 (next):** hand-entered private-buyer list (Ripple, Stripe, Kraken, Fidelity), clearly labeled as manual and not from filings.
+
+Later:
+1. Apply the same D/E recompute to `memo.py`, keeping it as the fallback, so the AKRA-style error is fixed for screened targets too.
+2. Watch agent. Streamlit only runs when the page is visited, so "live updates" need a scheduler: GitHub Actions cron -> snapshot the screened set to a JSON file in the repo -> diff against the last snapshot -> Claude summarizes what entered or left the screen and why -> notify (email or Slack webhook). Needs storage and secrets in GitHub Actions.
+3. Optional `web_search` for news after the latest filing, then a sector/peer comps agent.
 
 ## Not in the repo
 AKRA memo PDF, AKRA annual report, old `ma_screener_app.py` and `ma_screener_starter.py` (obsolete).

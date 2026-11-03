@@ -35,10 +35,14 @@ def fixture_financials(ticker):
     return FIXTURES.get(ticker) or {"status": "not_available", "reason": f"No fixture for {ticker}"}
 
 
+FIXTURE_TEXT = "is expanding its digital asset services and completed 2 acquisitions in this area."
+
+
 def fixture_filing(ticker, section, form="10-K"):
+    date = "2026-10-01" if form == "10-Q" else "2026-02-01"
     return {
-        "status": "ok", "citation": f"{ticker} {form} fixture, section: {section}", "url": "fixture", "truncated": False,
-        "excerpt": f"{ticker} is expanding its digital asset services and completed 2 acquisitions in this area.",
+        "status": "ok", "form": form, "filing_date": date, "citation": f"{ticker} {form} fixture, section: {section}",
+        "url": "fixture", "truncated": False, "excerpt": f"{ticker} {FIXTURE_TEXT}",
     }
 
 
@@ -46,6 +50,14 @@ FIXTURE_TOOLS = {
     "get_candidates": fixture_candidates,
     "get_financials": fixture_financials,
     "fetch_filing_excerpt": fixture_filing,
+}
+
+
+ALL_FACTORS = ("digital_asset_activity", "target_line_activity", "stated_priority", "related_deal", "clear_obstacle")
+FIXTURE_FACTORS = {
+    "AAA": ["digital_asset_activity", "target_line_activity"],
+    "BBB": ["digital_asset_activity", "target_line_activity", "stated_priority", "related_deal"],
+    "CCC": [],
 }
 
 
@@ -80,11 +92,13 @@ class DryRunClient:
         if turn == 0:
             return tool_response("get_financials", {"ticker": ticker})
         if turn == 1:
-            return tool_response("fetch_filing_excerpt", {"ticker": ticker, "section": "digital_assets", "form": "10-K"})
+            return tool_response("fetch_filing_excerpt", {"ticker": ticker, "section": "digital_assets", "form": "10-Q"})
+        factors = FIXTURE_FACTORS[ticker]
         return text_response(json.dumps({
-            "fit_score": {"AAA": 4, "BBB": 5, "CCC": 2}[ticker],
+            **{factor: factor in factors for factor in ALL_FACTORS},
             "rationale": f"The fixture filing says {ticker} is expanding its digital asset services.",
             "strategic_gap_addressed": "Adds regulated custody in this fixture scenario.",
             "key_risks": ["Fixture integration risk", "Fixture regulatory risk"],
-            "sources": [f"{ticker} 10-K fixture, section: digital_assets"],
+            "evidence": [{"supports": factor, "citation": f"{ticker} 10-Q fixture, section: digital_assets",
+                          "quote": FIXTURE_TEXT} for factor in factors],
         }))

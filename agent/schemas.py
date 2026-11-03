@@ -1,5 +1,7 @@
 """Output models. The model writes Shortlist and BuyerAssessment; Python fills the rest."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -8,12 +10,38 @@ class Shortlist(BaseModel):
     reasoning: str = Field(description="1-2 sentences on how the shortlist was chosen")
 
 
+Factor = Literal["digital_asset_activity", "target_line_activity", "stated_priority", "related_deal", "clear_obstacle"]
+
+
+class Evidence(BaseModel):
+    supports: Factor = Field(description="The factor this quote supports")
+    citation: str = Field(description="The citation string of the filing result the quote came from")
+    quote: str = Field(description="Copied word for word from that result, under 30 words, with no ellipses")
+
+
 class BuyerAssessment(BaseModel):
-    fit_score: int = Field(ge=1, le=5, description="Strategic fit, per the system prompt rubric")
+    digital_asset_activity: bool = Field(description="The filing discloses digital asset activity by the buyer")
+    target_line_activity: bool = Field(description="The filing discloses activity in the target's own line of business")
+    stated_priority: bool = Field(description="The filing names the target's capability as a priority or gap")
+    related_deal: bool = Field(description="The filing discloses an acquisition in the target's area")
+    clear_obstacle: bool = Field(description="The filing states something that rules this deal out")
     rationale: str = Field(description="2-3 sentences")
     strategic_gap_addressed: str = Field(description="One sentence, or 'not available'")
     key_risks: list[str] = Field(description="2-4 short risks specific to this buyer")
-    sources: list[str] = Field(description="The citation strings of the tool results relied on")
+    evidence: list[Evidence] = Field(description="At least one quote for each factor marked true")
+
+    @property
+    def fit_score(self) -> int:
+        """Computed here, not by the model, so the same answers always give the same score."""
+        if self.clear_obstacle:
+            return 1
+        if self.target_line_activity:
+            return 5 if self.stated_priority and self.related_deal else 4
+        return 3 if self.digital_asset_activity else 2
+
+    def true_factors(self) -> set[str]:
+        factors = ("digital_asset_activity", "target_line_activity", "stated_priority", "related_deal", "clear_obstacle")
+        return {factor for factor in factors if getattr(self, factor)}
 
 
 class AbilityToPay(BaseModel):
@@ -37,6 +65,8 @@ class BuyerResult(BaseModel):
     assessment: BuyerAssessment | None = None
     ability_to_pay: AbilityToPay | None = None
     financials: dict = Field(default_factory=dict)
+    latest_filing: str = "not available"
+    sources: list[dict] = Field(default_factory=list)  # built by code from what was actually retrieved
     unverified_numbers: list[str] = Field(default_factory=list)
     iterations: int = 0
 
