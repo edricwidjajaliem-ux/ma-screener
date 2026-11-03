@@ -3,7 +3,7 @@ import datetime
 import pandas as pd
 
 from buyer_section import render_buyer_section
-from data import UNIVERSE, apply_filters, load_data
+from data import UNIVERSE, apply_filters, load_with_fallback
 from memo import generate_deal_memo
 
 st.set_page_config(page_title="Cross-Border M&A Screener", layout="wide")
@@ -16,7 +16,7 @@ with col_refresh:
         st.cache_data.clear()
 
 with st.spinner("Pulling live market data..."):
-    df = load_data(UNIVERSE)
+    df, snapshot_date = load_with_fallback(UNIVERSE)
 
 if df.empty:
     st.error("Unable to pull market data right now (Yahoo Finance may be temporarily rate-limiting this server). Try clicking Refresh in a minute.")
@@ -24,7 +24,10 @@ if df.empty:
     render_buyer_section()
     st.stop()
 
-st.caption(f"Last updated: {datetime.datetime.now().strftime('%b %d, %Y %I:%M %p')} — market caps shown in USD. Data refreshes every 5 minutes, or click Refresh above.")
+if snapshot_date:
+    st.warning(f"Live market data is unavailable (Yahoo Finance may be temporarily rate-limiting this server). Showing saved data from {snapshot_date}, so figures may be out of date. Try clicking Refresh in a minute.")
+else:
+    st.caption(f"Last updated: {datetime.datetime.now().strftime('%b %d, %Y %I:%M %p')} — market caps shown in USD. Data refreshes every 5 minutes, or click Refresh above.")
 
 # Sidebar filters
 st.sidebar.header("Screening Filters")
@@ -111,6 +114,8 @@ st.download_button(
 # AI deal memo
 st.divider()
 st.subheader("AI Deal Memo Generator")
+if snapshot_date:
+    st.caption(f"Memos use the saved data from {snapshot_date}.")
 
 # Read from Streamlit secrets — see .streamlit/secrets.toml locally, or Settings > Secrets on Streamlit Cloud
 ANTHROPIC_API_KEY = st.secrets.get("ANTHROPIC_API_KEY", "")
