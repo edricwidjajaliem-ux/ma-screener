@@ -10,7 +10,8 @@ Python 3.13, Streamlit, yfinance, pandas, anthropic SDK (model `claude-sonnet-4-
 - `app.py`: Streamlit UI. Sidebar filters, results table, CSV export, deal memo section.
 - `data.py`: `UNIVERSE` (ticker -> (country, currency), 38 tickers), `get_fx_rate`, `get_company_data`, `load_data`. All `@st.cache_data(ttl=300)`.
 - `memo.py`: `generate_deal_memo(company_row, api_key)` single Claude call.
-- Secrets: `ANTHROPIC_API_KEY` in `.streamlit/secrets.toml` locally (gitignored) and in Streamlit Cloud Secrets. Never hardcode or commit.
+- `agent/`: buyer analysis. `agent.py` (loop, caps, CLI), `tools.py`, `verify.py` (number check), `schemas.py`, `report.py` (memo, no LLM), `mock.py` (dry run). `data.py` also holds `BUYER_UNIVERSE`, `load_buyers`, and `apply_filters`.
+- Secrets: `ANTHROPIC_API_KEY` in `.streamlit/secrets.toml` locally (gitignored) and in Streamlit Cloud Secrets. Never hardcode or commit. The agent also reads `SEC_USER_AGENT`, `MODEL_NAME` (default `claude-haiku-5-5`), `MAX_RUN_TOKENS`, and `ENABLE_AGENT` (leave off on the public app).
 
 ## Key decisions (do not re-litigate; execute)
 - Mid-cap focus ($10B-$200B default), since mega-caps are unlikely targets.
@@ -22,9 +23,15 @@ Python 3.13, Streamlit, yfinance, pandas, anthropic SDK (model `claude-sonnet-4-
 
 ## Known gotchas
 - yfinance `debtToEquity` has inconsistent units (percent vs ratio). It caused a wrong AI memo claim (AKRA showed 34.2x; real figure about 1.26x total liabilities/equity, verified against the annual report).
+- `get_financials` recomputes D/E from the balance sheet and flags mismatches with Yahoo's ratio. That is the current answer to the AKRA problem, for buyers only; the target memo in `memo.py` still uses Yahoo's ratio.
 - `enterpriseToEbitda` is glitchy for some tickers (PGAS, ADRO, MEDC).
 - Streamlit Cloud shared IPs can get rate-limited by Yahoo. `load_data` returns an empty DataFrame and `app.py` shows an error rather than crashing.
 - `memo.py` still uses `$` for the price on non-USD tickers and the heading "Why It's an Attractive Acquisition Target". Both are known, minor, worth fixing.
+- Yahoo's cash and EV aren't meaningful for banks and brokers (JPM cash $1.88T, STT EV -$58B). They are tagged `bank_broker` in `BUYER_UNIVERSE` and sized by % of market cap.
+- BNY trades as `BNY` on Yahoo, not `BK`. The model recalled `BK` from memory, so buyer loops force the ticker in code.
+- BNY keeps most 10-K content in an Exhibit 13 with an uninformative file name. `_annual_report_exhibit` finds it from the filing index.
+- SEC EDGAR returns 403 without a contact email in the User-Agent.
+- Haiku 5.5 costs 5x per request when a prompt is over 100k tokens. `request_cost` handles it; the largest prompt seen so far was about 27k.
 - Use `pip3` on Mac.
 
 ## Preferences
@@ -33,14 +40,14 @@ Python 3.13, Streamlit, yfinance, pandas, anthropic SDK (model `claude-sonnet-4-
 - Explain each decision briefly so he can defend it.
 - Keep him executing; do not let him spiral on "is it big enough".
 
-## Agent roadmap (the current task)
-Goal: add real AI agents to the screener, with a story he can defend in interviews.
+## Agent roadmap
+Goal: real AI agents in the screener, with a story he can defend in interviews.
 
-1. **Memo verification agent (do first).** Replace the single-shot memo with a tool-using loop (Anthropic tool use). Tools: `get_balance_sheet(ticker)`, `get_income_statement(ticker)`, `get_peer_multiples(ticker)`. The agent recomputes D/E and EV/EBITDA from statements, flags any mismatch with the yfinance ratio, and writes the memo from verified numbers. This directly fixes the AKRA D/E problem and is the strongest interview story.
-2. **Watch agent (phase 2).** Streamlit only runs when the page is visited, so "live updates" need a scheduler: GitHub Actions cron -> snapshot the screened set to a JSON file in the repo -> diff against the last snapshot -> Claude summarizes what entered or left the screen and why -> notify (email or Slack webhook). Needs storage and secrets in GitHub Actions.
-3. Later: sector/peer comps agent; EDGAR filings retrieval for US names.
-
-Build order: put the agent in its own module (`agent.py`), keep `memo.py` as fallback, and add a toggle in `app.py`. Log tool calls so the reasoning is visible in the UI.
+1. **Buyer analysis agent (built).** `agent/`: target description -> ranked public buyer map with sourced memo. Python fills table figures, and a number check runs on the model's text. The D/E recompute and mismatch flag from the earlier memo verification plan live in `get_financials`.
+2. **Next for buyers (v2).** Hand-entered private-buyer list (Ripple, Stripe, Kraken, Fidelity), clearly labeled as manual and not from filings. Citation verification, which was cut from v1. Optional `web_search`, off in v1.
+3. **Memo verification for targets.** Apply the same D/E recompute to `memo.py`, keeping it as the fallback, so the AKRA-style error is fixed for screened targets too.
+4. **Watch agent.** Streamlit only runs when the page is visited, so "live updates" need a scheduler: GitHub Actions cron -> snapshot the screened set to a JSON file in the repo -> diff against the last snapshot -> Claude summarizes what entered or left the screen and why -> notify (email or Slack webhook). Needs storage and secrets in GitHub Actions.
+5. Later: sector/peer comps agent.
 
 ## Not in the repo
 AKRA memo PDF, AKRA annual report, old `ma_screener_app.py` and `ma_screener_starter.py` (obsolete).

@@ -38,6 +38,27 @@ UNIVERSE = {
     "AOT.BK": ("Thailand", "THB"),
 }
 
+# Potential acquirers for crypto/fintech targets: ticker -> (segment, balance sheet type).
+# "bank_broker" cash includes client and deposit funding, so it can't be read as
+# money available for a deal. BNY trades as BNY on Yahoo (formerly BK).
+BUYER_UNIVERSE = {
+    "COIN": ("Crypto-native", "corporate"),
+    "HOOD": ("Retail broker", "bank_broker"),
+    "SCHW": ("Retail broker", "bank_broker"),
+    "IBKR": ("Retail broker", "bank_broker"),
+    "CME":  ("Exchange", "corporate"),
+    "ICE":  ("Exchange", "corporate"),
+    "PYPL": ("Payments", "corporate"),
+    "XYZ":  ("Payments", "corporate"),
+    "MA":   ("Payments", "corporate"),
+    "STT":  ("Custody bank", "bank_broker"),
+    "NTRS": ("Custody bank", "bank_broker"),
+    "BNY":  ("Custody bank", "bank_broker"),
+    "JPM":  ("Global bank", "bank_broker"),
+    "GS":   ("Global bank", "bank_broker"),
+    "BLK":  ("Asset manager", "corporate"),
+}
+
 
 @st.cache_data(ttl=300)
 def get_fx_rate(currency):
@@ -75,11 +96,53 @@ def get_company_data(ticker, country, currency):
         return None
 
 
+def apply_filters(df, market_cap_range=None, max_ev_ebitda=None, min_revenue_growth=None,
+                  min_profit_margin=None, max_debt_equity=None, countries=None, sectors=None):
+    """Shared by the sidebar and the agent. A None filter is skipped. Market cap range is in $B."""
+    filtered = df
+    if market_cap_range is not None:
+        filtered = filtered[
+            (filtered["Market Cap"] >= market_cap_range[0] * 1_000_000_000) &
+            (filtered["Market Cap"] <= market_cap_range[1] * 1_000_000_000)
+        ]
+    if max_ev_ebitda is not None:
+        filtered = filtered[filtered["EV/EBITDA"] <= max_ev_ebitda]
+    if min_revenue_growth is not None:
+        filtered = filtered[filtered["Revenue Growth (%)"] >= min_revenue_growth]
+    if min_profit_margin is not None:
+        filtered = filtered[filtered["Profit Margin (%)"] >= min_profit_margin]
+    if max_debt_equity is not None:
+        filtered = filtered[filtered["Debt/Equity"] <= max_debt_equity]
+    if countries:
+        filtered = filtered[filtered["Country"].isin(countries)]
+    if sectors:
+        filtered = filtered[filtered["Sector"].isin(sectors)]
+    return filtered
+
+
+@st.cache_data(ttl=300)
+def load_buyers():
+    """Buyer universe without load_data's dropna: most banks and brokers have no EV/EBITDA."""
+    records = [get_company_data(t, "United States", "USD") for t in BUYER_UNIVERSE]
+    df = _build_frame([r for r in records if r is not None])
+    if df.empty:
+        return df
+    df["Segment"] = df["Ticker"].map(lambda t: BUYER_UNIVERSE[t][0])
+    df["Balance Sheet"] = df["Ticker"].map(lambda t: BUYER_UNIVERSE[t][1])
+    return df.dropna(subset=["Market Cap"])
+
+
 @st.cache_data(ttl=300)
 def load_data(universe):
     records = [get_company_data(t, c, cur) for t, (c, cur) in universe.items()]
     records = [r for r in records if r is not None]
+    df = _build_frame(records)
+    if df.empty:
+        return df
+    return df.dropna(subset=["Market Cap", "EV/EBITDA", "Revenue Growth (%)"])
 
+
+def _build_frame(records):
     if not records:
         # yfinance returned nothing for every ticker — likely a temporary
         # block/rate-limit on this server's IP. Return an empty, correctly
@@ -99,5 +162,4 @@ def load_data(universe):
 
     df["Revenue Growth (%)"] = df["Revenue Growth (%)"] * 100
     df["Profit Margin (%)"] = df["Profit Margin (%)"] * 100
-    df = df.dropna(subset=["Market Cap", "EV/EBITDA", "Revenue Growth (%)"])
     return df
