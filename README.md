@@ -16,7 +16,8 @@ Most screening tools stop at the US or treat Southeast Asia as an afterthought. 
 
 ## What it does
 
-- Screens 35+ companies across five markets on market cap, total revenue, EV/EBITDA, revenue growth, profit margin, and debt/equity
+- Screens 38 companies across five markets on market cap, EV/EBITDA, revenue growth, profit margin, and debt/equity
+- Screens banks and similar financials on price-to-book and ROE instead, because EV/EBITDA and debt/equity don't work when debt funds the business
 - Converts every market cap and revenue figure to USD using live FX rates, since SE Asia figures come back in local currency
 - Filters by geography and sector
 - Generates a preliminary screening memo (company overview, why it's attractive, key risks, valuation range) via the Claude API for any company in the filtered results
@@ -105,6 +106,9 @@ Python, Pandas, Streamlit, yFinance, Claude API (Anthropic), SEC EDGAR, Pydantic
 - Philippines (PSE) is excluded — no reliable free data source found via yFinance
 - The AI-generated memo is a first-pass draft based only on the metrics shown; it is not a substitute for real diligence, filings review, or comparable transaction analysis
 - "Screened" means a company fits a common financial profile for acquisition candidates — not that it is an actual, confirmed target
+- Banks are hard targets in practice: deals need regulatory approval, and foreign ownership rules may limit cross-border buyers. A bank passing the screen says nothing about whether a deal could get done
+- The list of financials screened on book value is set by hand, and their P/B and ROE come from Yahoo and haven't been checked against annual reports
+- The company count depends on Yahoo returning data, and a company missing its required metrics drops out of the screen
 
 ## Running locally
 

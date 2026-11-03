@@ -44,6 +44,10 @@ UNIVERSE = {
     "AOT.BK": ("Thailand", "THB"),
 }
 
+# Screened on price-to-book and ROE. EV/EBITDA doesn't work when debt is the raw material
+# of the business, and Yahoo has no such multiple for these names.
+BOOK_VALUE_TICKERS = {"RJF", "BBCA.JK", "D05.SI", "O39.SI", "U11.SI", "1155.KL"}
+
 # Fewer live rows than this means Yahoo is blocking us, not that the market changed.
 MIN_LIVE_ROWS = len(UNIVERSE) // 2
 
@@ -99,6 +103,8 @@ def get_company_data(ticker, country, currency):
             "Revenue Growth (%)": info.get("revenueGrowth"),
             "Profit Margin (%)": info.get("profitMargins"),
             "Debt/Equity": info.get("debtToEquity"),
+            "P/B": info.get("priceToBook"),
+            "ROE (%)": info.get("returnOnEquity"),
             "Current Price": info.get("currentPrice"),
         }
     except Exception:
@@ -106,22 +112,31 @@ def get_company_data(ticker, country, currency):
 
 
 def apply_filters(df, market_cap_range=None, max_ev_ebitda=None, min_revenue_growth=None,
-                  min_profit_margin=None, max_debt_equity=None, countries=None, sectors=None):
-    """Shared by the sidebar and the agent. A None filter is skipped. Market cap range is in $B."""
+                  min_profit_margin=None, max_debt_equity=None, countries=None, sectors=None,
+                  max_price_to_book=None, min_roe=None):
+    """Shared by the sidebar and the agent. A None filter is skipped. Market cap range is in $B.
+
+    Book-value companies skip EV/EBITDA, margin and debt/equity, and everyone else skips P/B and ROE.
+    """
     filtered = df
+    is_book = lambda frame: frame["Valuation Basis"].eq("book") if "Valuation Basis" in frame else pd.Series(False, index=frame.index)
     if market_cap_range is not None:
         filtered = filtered[
             (filtered["Market Cap"] >= market_cap_range[0] * 1_000_000_000) &
             (filtered["Market Cap"] <= market_cap_range[1] * 1_000_000_000)
         ]
     if max_ev_ebitda is not None:
-        filtered = filtered[filtered["EV/EBITDA"] <= max_ev_ebitda]
+        filtered = filtered[is_book(filtered) | (filtered["EV/EBITDA"] <= max_ev_ebitda)]
     if min_revenue_growth is not None:
         filtered = filtered[filtered["Revenue Growth (%)"] >= min_revenue_growth]
     if min_profit_margin is not None:
-        filtered = filtered[filtered["Profit Margin (%)"] >= min_profit_margin]
+        filtered = filtered[is_book(filtered) | (filtered["Profit Margin (%)"] >= min_profit_margin)]
     if max_debt_equity is not None:
-        filtered = filtered[filtered["Debt/Equity"] <= max_debt_equity]
+        filtered = filtered[is_book(filtered) | (filtered["Debt/Equity"] <= max_debt_equity)]
+    if max_price_to_book is not None:
+        filtered = filtered[~is_book(filtered) | (filtered["P/B"] <= max_price_to_book)]
+    if min_roe is not None:
+        filtered = filtered[~is_book(filtered) | (filtered["ROE (%)"] >= min_roe)]
     if countries:
         filtered = filtered[filtered["Country"].isin(countries)]
     if sectors:
@@ -148,7 +163,10 @@ def load_data(universe):
     df = _build_frame(records)
     if df.empty:
         return df
-    return df.dropna(subset=["Market Cap", "EV/EBITDA", "Revenue Growth (%)"])
+    df = df.dropna(subset=["Market Cap", "Revenue Growth (%)"])
+    is_book = df["Valuation Basis"].eq("book")
+    has_metrics = df[["P/B", "ROE (%)"]].notna().all(axis=1).where(is_book, df["EV/EBITDA"].notna())
+    return df[has_metrics]
 
 
 def _build_frame(records):
@@ -159,7 +177,8 @@ def _build_frame(records):
         return pd.DataFrame(columns=[
             "Ticker", "Name", "Country", "Sector", "Market Cap (local)",
             "Currency", "Total Revenue (local)", "EV/EBITDA", "Revenue Growth (%)", "Profit Margin (%)",
-            "Debt/Equity", "Current Price", "FX Rate", "Market Cap", "Total Revenue"
+            "Debt/Equity", "P/B", "ROE (%)", "Current Price", "FX Rate", "Market Cap", "Total Revenue",
+            "Valuation Basis"
         ])
 
     df = pd.DataFrame(records)
@@ -171,6 +190,8 @@ def _build_frame(records):
 
     df["Revenue Growth (%)"] = df["Revenue Growth (%)"] * 100
     df["Profit Margin (%)"] = df["Profit Margin (%)"] * 100
+    df["ROE (%)"] = df["ROE (%)"] * 100
+    df["Valuation Basis"] = df["Ticker"].map(lambda t: "book" if t in BOOK_VALUE_TICKERS else "earnings")
     return df
 
 
